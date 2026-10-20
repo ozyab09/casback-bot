@@ -28,7 +28,7 @@ export function optInt(v, field, min = -Infinity, max = Infinity) {
   return reqInt(v, field, min, max);
 }
 
-/** Список MCC-кодов: массив целых 0..99999; нормализуем строки к числам и дедупим. */
+/** Список MCC-кодов: массив целых 1..99999; нормализуем строки к числам и дедупим. */
 export function mccList(v, field) {
   if (v == null) return [];
   if (!Array.isArray(v)) throw new ValidationError(`${field}: ожидается массив MCC-кодов`);
@@ -36,10 +36,18 @@ export function mccList(v, field) {
   for (const item of v) {
     let n = item;
     if (typeof n === 'string' && /^\s*\d+\s*$/.test(n)) n = Number(n.trim());
-    if (!ind(n) || n < 0 || n > 99999) throw new ValidationError(`${field}: MCC-код «${item}» не число 0..99999`);
+    if (!ind(n) || n < 1 || n > 99999) throw new ValidationError(`${field}: MCC-код «${item}» не число 1..99999`);
     if (!out.includes(n)) out.push(n);
   }
   return out;
+}
+
+/** Один MCC-код: число или числовая строка, целое 1..99999. */
+export function mccCode(v, field) {
+  let n = v;
+  if (typeof n === 'string' && /^\s*\d+\s*$/.test(n)) n = Number(n.trim());
+  if (!ind(n) || n < 1 || n > 99999) throw new ValidationError(`${field}: «${v}» не MCC-код (целое 1..99999)`);
+  return n;
 }
 
 export function bool(v, field) {
