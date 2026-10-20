@@ -5,38 +5,44 @@
 //  3) иначе 0%. Лимиты: если у карты задан monthlyLimit и limitLeft === 0 —
 //     процент маркируется как «лимит исчерпан» (кэшбэк не считается).
 import { db } from 'sdk';
-import { eq, and, like, or } from 'sdk/db';
+import { eq } from 'sdk/db';
 import { banks, cards, categories, places, mccRef } from '../schema.js';
 import { ValidationError } from './validation.js';
 
 const num = (s) => (typeof s === 'string' ? s.toUpperCase() : '');
 const norm = (s) => String(s ?? '').toUpperCase();
 
-/** MCC/точка по текстовому запросу: личные точки → справочник → подсказки. */
+/** Регистронезависимое сравнение в JS: SQLite-коллация не гарантирует
+ *  case-insensitive для кириллицы (UPPER/LOWER работают только с ASCII). */
+const hasSub = (hay, needle) => hay.toLowerCase().includes(needle.toLowerCase());
+
+/** MCC/точка по текстовому запросу: личные точки → справочник → подсказки.
+ *  Выборка — целиком по пользователю/справочнику, матч — в JS (см. hasSub). */
 async function resolveMcc(userId, query) {
-  const q = norm(query).trim();
+  const q = String(query ?? '').trim();
   if (!q) return { mcc: null };
 
   // личные точки — сначала точное имя, потом подстрока
-  const exact = await db.select().from(places).where(and(eq(places.userId, userId), eq(places.name, query.trim()))).get();
+  const userPlaces = await db.select().from(places).where(eq(places.userId, userId)).all();
+  const exact = userPlaces.find((p) => hasSub(p.name, q) && p.name.length === q.length) ?? null;
   if (exact) return { mcc: exact.mcc, title: exact.name, source: 'place' };
 
-  const inPlaces = await db.select().from(places)
-    .where(and(eq(places.userId, userId), like(places.name, `%${q}%`))).all();
-  if (inPlaces.length === 1) return { mcc: inPlaces[0].mcc, title: inPlaces[0].name, source: 'place' };
+  const inPlaces = userPlaces.filter((p) => hasSub(p.name, q));
 
-  const inRef = await db.select().from(mccRef)
-    .where(or(like(mccRef.title, `%${q}%`), like(mccRef.mcc, `${q}%`))).limit(10).all();
+  const allRef = await db.select().from(mccRef).all();
+  const inRef = allRef.filter(
+    (r) => String(r.mcc).startsWith(q) || hasSub(r.title, q)
+  );
 
-  if (inPlaces.length > 1 || inRef.length > 1 || (inPlaces.length === 0 && inRef.length > 1)) {
+  if (inPlaces.length > 1 || inRef.length > 1) {
     const suggestions = [
       ...inPlaces.map((p) => ({ mcc: p.mcc, title: p.name, source: 'place' })),
       ...inRef.map((r) => ({ mcc: r.mcc, title: r.title, source: 'ref' })),
     ].slice(0, 10);
     return { mcc: null, suggestions, suggestionsTitle: `уточните: «${query}» »` };
   }
-  if (inRef.length === 1) return { mcc: inRef[0].mcc, title: inRef[0].title, source: 'ref' };
   if (inPlaces.length === 1) return { mcc: inPlaces[0].mcc, title: inPlaces[0].name, source: 'place' };
+  if (inRef.length === 1) return { mcc: inRef[0].mcc, title: inRef[0].title, source: 'ref' };
 
   return { mcc: null };
 }

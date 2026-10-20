@@ -29,10 +29,11 @@ export async function runCrud(fnName, input, ctx) {
     if (!isDelete && typeof arg.bankId === 'string' && /^\d+$/.test(arg.bankId.trim()))
       arg.bankId = Number(arg.bankId.trim());
     // delete-функции принимают голый id, save-функции — payload целиком
-    await repo[fnName](userId, isDelete ? reqId(input) : arg);
-    if (fnName === 'saveBank' || fnName === 'saveCard' || fnName === 'saveCategory' || fnName === 'savePlace')
-      return { id: arg.id ?? null, summary: await getSummary(userId) };
-    return await getSummary(userId);
+    // (#1: save-функции возвращают фактический id — при создании это new id,
+    // а не arg.id, который null)
+    const mutResult = await repo[fnName](userId, isDelete ? reqId(input) : arg);
+    if (isDelete) return await getSummary(userId);
+    return { id: mutResult ?? arg.id ?? null, summary: await getSummary(userId) };
   } catch (e) {
     mapError(e);
   }
