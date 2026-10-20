@@ -10,7 +10,6 @@ import { banks, cards, categories, places, mccRef } from '../schema.js';
 import { ValidationError } from './validation.js';
 
 const num = (s) => (typeof s === 'string' ? s.toUpperCase() : '');
-const norm = (s) => String(s ?? '').toUpperCase();
 
 /** Регистронезависимое сравнение в JS: SQLite-коллация не гарантирует
  *  case-insensitive для кириллицы (UPPER/LOWER работают только с ASCII). */
@@ -49,7 +48,7 @@ async function resolveMcc(userId, query) {
 
 export async function search(userId, { query, amount } = {}) {
   const q = String(query ?? '').trim();
-  if (!q) throw new ValidationErrorY('Укажите MCC или название точки');
+  if (!q) throw new ValidationError('Укажите MCC или название точки');
 
   let resolved = { mcc: null };
   if (/^\d{1,5}$/.test(q)) {
@@ -114,4 +113,3 @@ export async function search(userId, { query, amount } = {}) {
 }
 
 // Empty query -> ValidationError (см. lib/validation.js); эндпоинт мапит в 400.
-const ValidationErrorY = ValidationError;

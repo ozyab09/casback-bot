@@ -216,8 +216,8 @@ function Editor({ edit, bank, onClose, reload }) {
           note: form.note || null,
         });
       } else {
-        const mcc = form.mccText.split(',').map((s) => s.trim()).filter(Boolean).map(Number);
-        const excludedMcc = form.exclText.split(',').map((s) => s.trim()).filter(Boolean).map(Number);
+        const mcc = parseMccList(form.mccText, 'MCC');
+        const excludedMcc = parseMccList(form.exclText, 'Исключения MCC');
         await call('saveCategory', { bankId, id: src?.id, name: form.name, percent: Number(form.percent) || 0, mcc, excludedMcc, isAll: Boolean(form.isAll), note: form.note || null });
       }
       onClose(); reload();
@@ -238,7 +238,7 @@ function Editor({ edit, bank, onClose, reload }) {
       {isCard ? (
         <>
           <div className="row">
-            <input className="inp" placeholder="Последние 4 цифры" maxLength={4} value={form.last4} onChange={set('last4')} />
+            <input className="inp" placeholder="Последние 4 цифры" maxLength={4} inputMode="numeric" value={form.last4} onChange={(e) => setForm({ ...form, last4: e.target.value.replace(/\D/g, '') })} />
             <input className="inp" placeholder="Владелец" value={form.holder} onChange={set('holder')} />
           </div>
           <div className="row">
@@ -289,7 +289,9 @@ function Places({ summary, reload }) {
               try { await call('deletePlace', { id: edit.id }); setEdit(null); reload(); } catch (e) { alert(e.message); }
             }}>Удалить</button> : <span />}
             <button className="btn btn--primary" onClick={async () => {
-              try { await call('savePlace', { id: edit.id, name: edit.name, mcc: Number(edit.mcc) }); setEdit(null); reload(); } catch (e) { alert(e.message); }
+              const mcc = Number(edit.mcc);
+              if (!Number.isInteger(mcc) || mcc < 1 || mcc > 99999) { alert('MCC: введите целое число 1…99999'); return; }
+              try { await call('savePlace', { id: edit.id, name: edit.name, mcc }); setEdit(null); reload(); } catch (e) { alert(e.message); }
             }}>Сохранить</button>
           </div>
         </Modal>
@@ -341,6 +343,21 @@ function More({ reload }) {
 }
 
 /* ================= Общие ================= */
+
+/** Разбор списка MCC: только целые 1…99999, мусор — понятная ошибка вместо NaN. */
+function parseMccList(text, field) {
+  const out = [];
+  for (const raw of String(text ?? '').split(',')) {
+    const s = raw.trim();
+    if (!s) continue;
+    const n = Number(s);
+    if (!Number.isInteger(n) || n < 1 || n > 99999)
+      throw new Error(`${field}: «${s}» — не MCC-код (целое число 1…99999)`);
+    if (!out.includes(n)) out.push(n);
+  }
+  return out;
+}
+
 function Modal({ title, children, onClose }) {
   return (
     <div className="modal" onClick={onClose}>
