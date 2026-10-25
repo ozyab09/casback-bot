@@ -16,6 +16,7 @@ export const banks = table('banks', {
   id:        integer('id').primaryKey({ autoIncrement: true }),
   userId:    integer('user_id').notNull(),             // logical → users.id
   name:      text('name').notNull(),
+  currency:  text('currency').notNull().default('RUB'), валюта счёта
   createdAt: integer('created_at', { mode: 'timestamp' }).default(sql`(unixepoch())`),
 }, (t) => ({
   userIdx: index('idx_banks_user').on(t.userId),
@@ -29,9 +30,10 @@ export const cards = table('cards', {
   name:         text('name').notNull(),
   last4:        text('last4'),                         // последние 4 цифры, различие карт одного банка
   holder:       text('holder'),                        // владелец
-  monthlyLimit: integer('monthly_limit'),              // месячный лимит, ₽ (справочно)
+  monthlyLimit: integer('monthly_limit'),              // месячный лимит, валюта по currency карты
   limitLeft:    integer('limit_left'),                 // остаток лимита на месяц (ведёт пользователь)
   note:         text('note'),
+  currency:     text('currency').notNull().default('RUB'), валюта карты
   createdAt:    integer('created_at', { mode: 'timestamp' }).default(sql`(unixepoch())`),
 }, (t) => ({
   bankIdx: index('idx_cards_bank').on(t.bankId),
