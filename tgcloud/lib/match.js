@@ -3,7 +3,7 @@
 //  1) применимые категории карты: m ∈ mcc и m ∉ excludedMcc;
 //  2) иначе — категория «Все покупки» (isAll), применима, если m ∉ её excludedMcc;
 //  3) иначе 0%. Лимиты: если у карты задан monthlyLimit и limitLeft === 0 —
-//     процент маркируется как «лимит исчерпан» (кэшбэк не считается).
+//    процент маркируется как «лимит исчерпан» (кэшбэк не считается).
 import { db } from 'sdk';
 import { eq } from 'sdk/db';
 import { banks, cards, categories, places, mccRef } from '../schema.js';
@@ -21,28 +21,32 @@ async function resolveMcc(userId, query) {
   const q = String(query ?? '').trim();
   if (!q) return { mcc: null };
 
-  // личные точки — сначала точное имя, потом подстрока
+  // личные точки — сначала точное имя
   const userPlaces = await db.select().from(places).where(eq(places.userId, userId)).all();
-  const exact = userPlaces.find((p) => hasSub(p.name, q) && p.name.length === q.length) ?? null;
-  if (exact) return { mcc: exact.mcc, title: exact.name, source: 'place' };
+  const exactPlace = userPlaces.find((p) => hasSub(p.name, q) && p.name.length === q.length) ?? null;
 
-  const inPlaces = userPlaces.filter((p) => hasSub(p.name, q));
-
+  // справочник MCC
   const allRef = await db.select().from(mccRef).all();
   const inRef = allRef.filter(
     (r) => String(r.mcc).startsWith(q) || hasSub(r.title, q)
   );
 
+  // Сначала проверяем точное совпадение: личная точка
+  if (exactPlace) return { mcc: exactPlace.mcc, title: exactPlace.name, source: 'place' };
+  // Затем проверяем точное совпадение из справочника (ровно 1 результат)
+  if (inRef.length === 1) return { mcc: inRef[0].mcc, title: inRef[0].title, source: 'ref' };
+
+  // Если много совпадений — предлагаем уточнить
+  const inPlaces = userPlaces.filter((p) => hasSub(p.name, q));
   if (inPlaces.length > 1 || inRef.length > 1) {
     const suggestions = [
       ...inPlaces.map((p) => ({ mcc: p.mcc, title: p.name, source: 'place' })),
       ...inRef.map((r) => ({ mcc: r.mcc, title: r.title, source: 'ref' })),
     ].slice(0, 10);
-    return { mcc: null, suggestions, suggestionsTitle: `уточните: «${query}» »` };
+    return { mcc: null, suggestions, suggestionsTitle: `уточнить: «${query}» »` };
   }
-  if (inPlaces.length === 1) return { mcc: inPlaces[0].mcc, title: inPlaces[0].name, source: 'place' };
-  if (inRef.length === 1) return { mcc: inRef[0].mcc, title: inRef[0].title, source: 'ref' };
 
+  // Точного совпадения нет
   return { mcc: null };
 }
 
@@ -90,7 +94,7 @@ export async function search(userId, { query, amount } = {}) {
     const limitReached = card.monthlyLimit != null && card.limitLeft === 0;
     const percent = hit && !limitReached ? hit.percent : 0;
     const cashback = hit && amount != null && !limitReached
-      ? Math.round((Number(amount) * percent / 100) * 100) / 100
+      ? Number((Number(amount) * percent / 100).toFixed(2))
       : null;
     variants.push({
       bankId: bank.id, bankName: bank.name, cardId: card.id,
