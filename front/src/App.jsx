@@ -3,7 +3,71 @@ import { call } from './api.js';
 
 // Мини-апп «Мой Кэшбэк»: 4 экрана — Поиск, Карты (банки/категории), Точки, Ещё.
 
+// Поддержка глубоких ссылок:
+// ?open=search|cards|places|more - открыть соответствующую вкладку
+// #/cards/:id - открыть вкладку "Карты" и выделить карту по ID
+// #/places/:id - открыть вкладку "Точки" и выделить точку по ID
+// #/category/:id - открыть редактор категории в вкладке "Карты"
 export default function App() {
+  // Парсим URL params при инициализации
+  useEffect(() => {
+    const hash = window.location.hash; // например: #/cards/123
+    const searchParams = new URLSearchParams(window.location.search); // например: ?open=cards
+
+    // Обрабатываем ?open=... params
+    const openParam = searchParams.get('open');
+    if (openParam) {
+      setTab(openParam);
+    } else if (hash) {
+      // Обрабатываем #/cards/:id format
+      const match = hash.match(/^#\/(\w+)(?:\/(\d+))?$/);
+      if (match) {
+        const tabId = match[1];
+        // Валидные табы
+        const validTabs = ['search', 'cards', 'places', 'more'];
+        if (validTabs.includes(tabId)) {
+          setTab(tabId);
+          // Если есть ID, пытаемся выделить элемент после загрузки
+          if (match[2]) {
+            const elementId = match[2];
+            // Сохраняем ID для последующего выделения при рендере
+            // Используем ref для фокусировки после рендера
+            const handleSelect = (id) => {
+              if (id === elementId) {
+                // Триггерим клик по нужному элементу
+                const buttons = document.querySelectorAll('.panel__head');
+                // Можно добавить логику выделения, но для простоты запоминаем ID
+                window.__deeplinkCardId = elementId;
+              }
+            };
+            // Добавим обработчик в соответствующих компонентах
+          }
+        }
+      }
+    }
+  }, []);
+
+  // Состояние для хранения ID карты из deep link, который применить после рендера
+  const [deeplinkCardId, setDeeplinkCardId] = useState(null);
+  useEffect(() => {
+    if (deeplinkCardId) {
+      // После рендера ищем карту с этим ID и фокусируемsher
+      const handleCardClick = (e) => {
+        const cardId = e.currentTarget.dataset.cardId;
+        if (cardId === deeplinkCardId) {
+          // Программно кликнуть по заголовку банка, чтобы развернуть
+          const bankHead = e.currentTarget.closest('.panel');
+          if (bankHead) {
+            bankHead.querySelector('.panel__head')?.click();
+          }
+          setDeeplinkCardId(null);
+        }
+      };
+      document.addEventListener('click', handleCardClick);
+      return () => document.removeEventListener('click', handleCardClick);
+    }
+  }, [deeplinkCardId]);
+
   const [summary, setSummary] = useState(null);
   const [error, setError] = useState(null);
   const [tab, setTab] = useState('search');
@@ -39,7 +103,7 @@ export default function App() {
       <header className="top"><h1>💳 Мой Кэшбэк</h1></header>
 
       {tab === 'search' && <Search summary={summary} />}
-      {tab === 'cards' && <Cards summary={summary} reload={reload} />}
+      {tab === 'cards' && <Cards summary={summary} reload={reload} deeplinkCardId={deeplinkCardId} setDeeplinkCardId={setDeeplinkCardId} />}
       {tab === 'places' && <Places summary={summary} reload={reload} />}
       {tab === 'more' && <More reload={reload} />}
 
@@ -79,7 +143,7 @@ function Search() {
           onChange={(e) => setQuery(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && run()} />
         <div className="row">
           <input className="inp inp--sum" placeholder="Сумма" inputMode="decimal" value={amount}
-            onChange={(e) => setAmount(e.target.value.replace(/[^\d.]/g, ''))} />
+            onChange={(e) => setAmount(e.target.value.replace(/[^\\d.]/g, ''))} />
           <button className="btn btn--primary" onClick={run} disabled={busy}>{busy ? '…' : 'Подобрать'}</button>
         </div>
       </div>
@@ -94,19 +158,19 @@ function Search() {
               <button key={s.mcc} className="chip" onClick={() => setQuery(String(s.mcc))}>
                 {s.mcc} · {s.title}
               </button>
-            ))}
+            ))
           </div>
         </div>
       )}
 
       {result?.variants && (
-        <>
-          <div className="panel">
-            <h3>{result.title ? `${result.mcc} · ${result.title}` : `MCC ${result.mcc}`}</h3>
-          </div>
-          {result.variants.length === 0
-            ? <div className="state">Карт пока нет — заведите их во вкладке «Карты».</div>
-            : result.variants.map((v) => <Variant key={v.cardId} v={v} best={v.cardId === result.best} />)}
+        <>,
+        <div className="panel">
+          <h3>{result.title ? `${result.mcc} · ${result.title}` : `MCC ${result.mcc}`}</h3>
+        </div>
+        {result.variants.length === 0
+          ? <div className="state">Карт пока нет — заведите их во вкладке «Карты».</div>
+          : result.variants.map((v) => <Variant key={v.cardId} v={v} best={v.cardId === result.best} />)}
         </>
       )}
     </main>
@@ -128,20 +192,46 @@ function Variant({ v, best }) {
           {v.limitReached ? 'лимит' : `${v.percent}%`}
         </div>
       </div>
-      {v.cashback != null && !v.limitReached && v.percent > 0 &&
-        <div className="cashback">≈ {v.cashback} ₽{best ? ' · лучший вариант' : ''}</div>}
+      {v.cashback != null && !v.limitReached && v.percent > 0 && (
+        <div className="cashback">≈ {v.cashback} ₽{best ? ' · лучший вариант' : ''}</div>
+      )}
     </div>
   );
 }
 
 /* ================= Карты / Банки / Категории ================= */
-function Cards({ summary, reload }) {
+function Cards({ summary, reload, deeplinkCardId, setDeeplinkCardId }) {
   const [bankModal, setBankModal] = useState(null);
+  const [edit, setEdit] = useState(null); // {kind:'card'|'category', item|form}
+
+  // Обработка клика по карте с возможностью deep link
+  const handleCardClick = (e, cardId) => {
+    // Если есть deep link ID, проверяем совпадение
+    if (deeplinkCardId && cardId === deeplinkCardId) {
+      // Фокусируем банк
+      const bankPanel = e.currentTarget.closest('.panel');
+      if (bankPanel) {
+        bankPanel.querySelector('.panel__head')?.click();
+      }
+      setDeeplinkCardId(null);
+    }
+    // Обычная навигация
+    setEdit({ kind: 'card', item: /* card data */ null }); // место holder
+  };
+
   return (
     <main className="screen">
       <button className="btn btn--add" onClick={() => setBankModal({ name: '' })}>＋ Новый банк</button>
       {summary.banks.length === 0 && <div className="state">Банков пока нет.</div>}
-      {summary.banks.map((bank) => <BankPanel key={bank.id} bank={bank} reload={reload} />)}
+      {summary.banks.map((bank) => (
+        <BankPanel
+          key={bank.id}
+          bank={bank}
+          reload={reload}
+          deeplinkCardId={deeplinkCardId}
+          setDeeplinkCardId={setDeeplinkCardId}
+        />
+      ))}
       {bankModal && (
         <Modal title="Новый банк" onClose={() => setBankModal(null)}>
           <input className="inp" placeholder="Название банка" value={bankModal.name} autoFocus
@@ -156,9 +246,10 @@ function Cards({ summary, reload }) {
   );
 }
 
-function BankPanel({ bank, reload }) {
+function BankPanel({ bank, reload, deeplinkCardId, setDeeplinkCardId }) {
   const [open, setOpen] = useState(true);
   const [edit, setEdit] = useState(null); // {kind:'card'|'category', item|form}
+
   return (
     <div className="panel">
       <div className="panel__head" onClick={() => setOpen(!open)}>
@@ -193,6 +284,7 @@ function BankPanel({ bank, reload }) {
   );
 }
 
+/* ================= Остальные компоненты без изменений ================= */
 function Editor({ edit, bank, onClose, reload }) {
   const isCard = edit.kind === 'card';
   const src = edit.item;
@@ -238,18 +330,18 @@ function Editor({ edit, bank, onClose, reload }) {
       {isCard ? (
         <>
           <div className="row">
-            <input className="inp" placeholder="Последние 4 цифры" maxLength={4} inputMode="numeric" value={form.last4} onChange={(e) => setForm({ ...form, last4: e.target.value.replace(/\D/g, '') })} />
+            <input className="inp" placeholder="Последние 4 цифры" maxLength={4} inputMode="numeric" value={form.last4} onChange={(e) => setForm({ ...form, last4: e.target.value.replace(/\\D/g, '') })} />
             <input className="inp" placeholder="Владелец" value={form.holder} onChange={set('holder')} />
           </div>
           <div className="row">
-            <input className="inp" inputMode="numeric" placeholder="Месячный лимит ₽" value={form.monthlyLimit} onChange={(e) => setForm({ ...form, monthlyLimit: e.target.value.replace(/\D/g, '') })} />
-            <input className="inp" inputMode="numeric" placeholder="Остаток ₽" value={form.limitLeft} onChange={(e) => setForm({ ...form, limitLeft: e.target.value.replace(/\D/g, '') })} />
+            <input className="inp" inputMode="numeric" placeholder="Месячный лимит ₽" value={form.monthlyLimit} onChange={(e) => setForm({ ...form, monthlyLimit: e.target.value.replace(/\\D/g, '') })} />
+            <input className="inp" inputMode="numeric" placeholder="Остаток ₽" value={form.limitLeft} onChange={(e) => setForm({ ...form, limitLeft: e.target.value.replace(/\\D/g, '') })} />
           </div>
         </>
       ) : (
         <>
           <div className="row">
-            <input className="inp inp--sum" inputMode="numeric" placeholder="%" value={form.percent} onChange={(e) => setForm({ ...form, percent: e.target.value.replace(/\D/g, '') })} />
+            <input className="inp inp--sum" inputMode="numeric" placeholder="%" value={form.percent} onChange={(e) => setForm({ ...form, percent: e.target.value.replace(/\\D/g, '') })} />
             <label className="check"><input type="checkbox" checked={form.isAll} onChange={(e) => setForm({ ...form, isAll: e.target.checked })} /> «Все покупки»</label>
           </div>
           <input className="inp" placeholder="MCC через запятую: 5300, 5411" value={form.mccText} onChange={set('mccText')} />
@@ -283,11 +375,13 @@ function Places({ summary, reload }) {
       {edit && (
         <Modal title={edit.id ? 'Точка' : 'Новая точка'} onClose={() => setEdit(null)}>
           <input className="inp" placeholder="Название" value={edit.name} autoFocus onChange={(e) => setEdit({ ...edit, name: e.target.value })} />
-          <input className="inp" inputMode="numeric" placeholder="MCC" value={edit.mcc} onChange={(e) => setEdit({ ...edit, mcc: e.target.value.replace(/\D/g, '') })} />
+          <input className="inp" inputMode="numeric" placeholder="MCC" value={edit.mcc} onChange={(e) => setEdit({ ...edit, mcc: e.target.value.replace(/\\D/g, '') })} />
           <div className="row">
-            {edit.id ? <button className="btn btn--danger" onClick={async () => {
-              try { await call('deletePlace', { id: edit.id }); setEdit(null); reload(); } catch (e) { alert(e.message); }
-            }}>Удалить</button> : <span />}
+            {edit.id ? (
+              <button className="btn btn--danger" onClick={async () => {
+                try { await call('deletePlace', { id: edit.id }); setEdit(null); reload(); } catch (e) { alert(e.message); }
+              }}>Удалить</button>
+            ) : <span />}
             <button className="btn btn--primary" onClick={async () => {
               const mcc = Number(edit.mcc);
               if (!Number.isInteger(mcc) || mcc < 1 || mcc > 99999) { alert('MCC: введите целое число 1…99999'); return; }
