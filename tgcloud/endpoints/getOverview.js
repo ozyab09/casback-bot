@@ -1,13 +1,9 @@
-// endpoints/getOverview.js — POST /api/getOverview — первый пакет данных SPA.
-import { ensureMccRef, ensureUser, getSummary } from '../lib/repository.js';
-import { mapError } from '../lib/crudEndpoint.js';
+// endpoints/getOverview.js — POST /api/getOverview — возврат сводки данных пользователя
+import { getSummary } from '../lib/repository.js';
+import { ensureUser } from '../lib/repository.js';
 
 export default async function (input, ctx) {
-  try {
-    const userId = await ensureUser(ctx.initData.user);
-    await ensureMccRef();
-    return await getSummary(userId);
-  } catch (e) {
-    mapError(e);
-  }
+  const userId = await ensureUser(ctx.initData.user);
+  const summary = await getSummary(userId);
+  return summary;
 }
