@@ -62,22 +62,28 @@ export async function importData(userId, { mode, data }) {
   for (const bankSpec of spec.banks) {
     if (!bankSpec || typeof bankSpec !== 'object' || !bankSpec.name) throw new ValidationError('Банк без имени в документе');
     const bankName = String(bankSpec.name).trim();
+    // Ensure bankId is consistently a string for key generation
     let bankId = index.bankByName.get(bankName);
     if (!bankId) {
       bankId = await saveBank(userId, { name: bankName });
+      index.bankByName.set(bankName, String(bankId));
+    } else {
+      // Ensure stored ID is string
+      bankId = String(bankId);
       index.bankByName.set(bankName, bankId);
     }
 
     for (const cardSpec of bankSpec.cards ?? []) {
       if (cardSpec.monthlyLimit != null && (typeof cardSpec.monthlyLimit !== 'number' || cardSpec.monthlyLimit < 0))
         throw new ValidationError(`Карта «${cardSpec.name}»: monthlyLimit должен быть неотрицательным числом`);
-      if (cardSpec.last4 != null && (!/^\d{4}$/.test(String(cardSpec.last4))))
+      if (cardSpec.last4 != null && (!/^\\d{4}$/.test(String(cardSpec.last4))))
         throw new ValidationError(`Карта «${cardSpec.name}»: last4 — ровно 4 цифры`);
       // last4 приводим к строке: в БД он текст, а в чужом документе может быть число —
       // иначе ключ сопоставления не совпадёт и карта продублируется.
       const last4 = cardSpec.last4 == null ? null : String(cardSpec.last4).trim();
       const cardName = String(cardSpec.name ?? '').trim();
-      const cardKey = cardKeyOf(bankId, cardName, last4);
+      // Ensure bankId is string for consistent key generation
+      const cardKey = cardKeyOf(String(bankId), cardName, last4);
       const cardId = merge ? index.cardByKey.get(cardKey) : undefined;
       // Явные поля после spread: чужой документ не должен подменить id/bankId.
       const savedId = await saveCard(userId, {
@@ -88,10 +94,11 @@ export async function importData(userId, { mode, data }) {
     for (const catSpec of bankSpec.categories ?? []) {
       if (typeof catSpec?.percent !== 'number') throw new ValidationError(`Категория «${catSpec?.name}»: percent обязателен`);
       const catName = String(catSpec.name ?? '').trim();
-      const catKey = catKeyOf(bankId, catName);
+      // Ensure bankId is string for consistent key generation
+      const catKey = catKeyOf(String(bankId), catName);
       const catId = merge ? index.catByKey.get(catKey) : undefined;
       const savedId = await saveCategory(userId, {
-        id: catId, bankId, name: catSpec.name, percent: catSpec.percent,
+        id: catId, bankId: Number(bankId), name: catSpec.name, percent: catSpec.percent,
         mcc: mccList(catSpec.mcc, `Категория «${catName}»: mcc`),
         excludedMcc: mccList(catSpec.excluded ?? [], `Категория «${catName}»: excluded`),
         isAll: Boolean(catSpec.isAll), note: catSpec.note ?? null,
@@ -113,6 +120,7 @@ export async function importData(userId, { mode, data }) {
 }
 
 // Составные ключи — через JSON.stringify: разделитель не может встретиться в именах.
+// Ensured bankId is string for consistent key generation across DB load and spec import.
 const cardKeyOf = (bankId, name, last4) => JSON.stringify([bankId, name, last4 ?? '']);
 const catKeyOf = (bankId, name) => JSON.stringify([bankId, name]);
 
@@ -125,9 +133,9 @@ async function loadExisting(userId) {
     db.select().from(places).where(eq(places.userId, userId)).all(),
   ]);
   const index = { bankByName: new Map(), cardByKey: new Map(), catByKey: new Map(), placeByName: new Map() };
-  for (const b of bankRows) index.bankByName.set(String(b.name).trim(), b.id);
-  for (const c of cardRows) index.cardByKey.set(cardKeyOf(c.bankId, String(c.name).trim(), c.last4), c.id);
-  for (const c of catRows) index.catByKey.set(catKeyOf(c.bankId, String(c.name).trim()), c.id);
+  for (const b of bankRows) index.bankByName.set(String(b.name).trim(), String(b.id));
+  for (const c of cardRows) index.cardByKey.set(cardKeyOf(String(c.bankId), String(c.name).trim(), c.last4), c.id);
+  for (const c of catRows) index.catByKey.set(catKeyOf(String(c.bankId), String(c.name).trim()), c.id);
   for (const p of placeRows) index.placeByName.set(String(p.name).trim(), p.id);
   return index;
 }
