@@ -42,12 +42,22 @@ export function mccList(v, field) {
   return out;
 }
 
-/** Один MCC-код: число или числовая строка, целое 1..99999. */
+/** Один MCC-код: число или числовая строка, целое 1..99999.
+ *  Отвергает строки с leading/trailing whitespace.
+ */
 export function mccCode(v, field) {
-  let n = v;
-  if (typeof n === 'string' && /^\s*\d+\s*$/.test(n)) n = Number(n.trim());
-  if (!ind(n) || n < 1 || n > 99999) throw new ValidationError(`${field}: «${v}» не MCC-код (целое 1..99999)`);
-  return n;
+  if (typeof v === 'string') {
+    if (!/^\d+$/.test(v)) {
+      // Check if it's just whitespace
+      if (/^\s*$/.test(v)) throw new ValidationError(`${field}: MCC-код не может быть пустой строкой`);
+      throw new ValidationError(`${field}: «${v}» не MCC-код (целое число 1..99999 без пробелов)`);
+    }
+    const n = Number(v);
+    if (!ind(n) || n < 1 || n > 99999) throw new ValidationError(`${field}: «${v}» не MCC-код (целое 1..99999)`);
+    return n;
+  }
+  if (!ind(v) || v < 1 || v > 99999) throw new ValidationError(`${field}: «${v}» не MCC-код (целое 1..99999)`);
+  return v;
 }
 
 export function bool(v, field) {
