@@ -164,13 +164,16 @@ export async function saveCategory(userId, { id, bankId, ...raw }) {
   const excludedMcc = mccList(raw.excludedMcc, 'excludedMcc');
   const isAll = Boolean(raw.isAll);
   if (isAll) {
-    // «Все покупки» — одна на банк
+    // «Все покупки» — одна на банк: сбрасываем isAll у всех除了当前编辑的类别
     const existing = await db
       .select().from(categories)
-      .where(and(eq(categories.bankId, bankId), eq(categories.isAll, true))).all();
-    const others = existing.filter((r) => r.id !== id);
-    if (others.length) {
-      await db.update(categories).set({ isAll: false }).where(eq(categories.id, others[0].id)).run();
+      .where(and(eq(categories.bankId, bankId), eq(categories.isAll, true)))
+      .all();
+    // Обновляем все, кроме редактируемой категории (по id)
+    for (const cat of existing) {
+      if (cat.id !== id) {
+        await db.update(categories).set({ isAll: false }).where(eq(categories.id, cat.id)).run();
+      }
     }
   }
   const values = { name, percent, mcc, excludedMcc, isAll, note: optText(raw.note, 'Заметка', 500) };
