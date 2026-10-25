@@ -68,6 +68,25 @@ export const places = table('places', {
   nameIdx: index('idx_places_user_name').on(t.userId, t.name),
 }));
 
+/** История транзакций пользователя. */
+export const transactions = table('transactions', {
+  id:         integer('id').primaryKey({ autoIncrement: true }),
+  userId:     integer('user_id').notNull(),
+  amount:     integer('amount').notNull(),   // сумма в рублях (целое)
+  mcc:        integer('mcc'),                // MCC-код merchants (опционально)
+  categoryId: integer('category_id'),        // категория кэшбэка (опционально)
+  bankId:     integer('bank_id'),            // банк (опционально)
+  placeId:    integer('place_id'),           // торговая точка (опционально)
+  type:       text('type').notNull().default('expense'), // 'expense' или 'income'
+  createdAt:  integer('created_at', { mode: 'timestamp' }).default(sql`(unixepoch())`),
+}, (t) => ({
+  userIdx: index('idx_transactions_user').on(t.userId),
+  mccIdx: index('idx_transactions_mcc').on(t.mcc).where(t.mcc.isNotNull()),
+  categoryIdx: index('idx_transactions_category').on(t.category_id).where(t.category_id.isNotNull()),
+  bankIdx: index('idx_transactions_bank').on(t.bank_id).where(t.bank_id.isNotNull()),
+  placeIdx: index('idx_transactions_place').on(t.place_id).where(t.place_id.isNotNull()),
+}));
+
 /** Встроенный справочник MCC (read-only, seed из tgcloud/lib/mccRefData.js). */
 export const mccRef = table('mcc_ref', {
   mcc:   integer('mcc').primaryKey(),
