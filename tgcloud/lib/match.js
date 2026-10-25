@@ -90,7 +90,7 @@ export async function search(userId, { query, amount } = {}) {
     const limitReached = card.monthlyLimit != null && card.limitLeft === 0;
     const percent = hit && !limitReached ? hit.percent : 0;
     const cashback = hit && amount != null && !limitReached
-      ? Math.round((Number(amount) * percent / 100) * 100) / 100
+      ? Number((Number(amount) * percent / 100).toFixed(2))
       : null;
     variants.push({
       bankId: bank.id, bankName: bank.name, cardId: card.id,
