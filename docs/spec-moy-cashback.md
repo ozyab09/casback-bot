@@ -115,6 +115,9 @@
 | `mcc_ref` | `mcc` (PK), `title` — seed справочник |
 | `app_meta`? | версия формата экспорта (можно константой в коде) |
 
+> ⚠ Таблица `transactions` была определена в schema.js, но ни один компонент её не использует.
+> Удалена в рамках задачи #48 (A2).
+
 Индексы: `banks(user_id)`, `cards(user_id, bank_id)`, `categories(user_id, bank_id)`, `places(user_id)`, `mcc_ref(mcc)`.
 
 Формат экспорта (константа `SPEC_VERSION = 3` в `lib/export.js`):
