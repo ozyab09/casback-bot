@@ -1,12 +1,45 @@
 import React, { useEffect, useState } from 'react';
 import { call } from './api.js';
 
-// Мини-апп «Мой Кэшбэк»: 4 экрана — Поиск, Карты (банки/категории), Точки, Ещё.
+// Мини-апп «Мой Кэшбэк»: экраны — Поиск, Карты, Точки, Ещё.
+// Все сообщения вместо alert()/confirm() через кастомный Dialog.
 
+/* ========================= Dialog (замена alert/confirm) ========================= */
+function Dialog({ open, onClose, type, title, message, yesLabel, onYes }) {
+  if (!open) return null;
+
+  return (
+    <div className="modal" onClick={type === 'confirm' ? onClose : undefined}>
+      <div className="modal__box" onClick={(e) => e.stopPropagation()}>
+        <div className="modal__head">
+          <b>{title || (type === 'error' ? 'Ошибка' : 'Подтверждение')}</b>
+          {type !== 'confirm' && <button className="modal__x" onClick={onClose}>✕</button>}
+        </div>
+        <p style={{ margin: '0.8em 0', whiteSpace: 'pre-line' }}>{message}</p>
+        {type === 'confirm' ? (
+          <div className="row">
+            <button className="btn btn--danger" onClick={() => { onYes?.(true); onClose(); }}>Да</button>
+            <button className="btn" onClick={() => { onYes?.(false); onClose(); }}>Отмена</button>
+          </div>
+        ) : (
+          <button className="btn btn--primary" onClick={onClose}>{yesLabel || 'OK'}</button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ========================= Main App ========================= */
 export default function App() {
   const [summary, setSummary] = useState(null);
   const [error, setError] = useState(null);
   const [tab, setTab] = useState('search');
+  // Диалог-состояние
+  const [dialog, setDialog] = useState(null); // { type:'error'|'info'|'confirm', title?, message?, yesLabel?, onYes? }
+
+  // Прокси для дочерних компонентов
+  const showDialog = (props) => setDialog(props);
+  const hideDialog = () => setDialog(null);
 
   const reload = async () => {
     try {
@@ -26,23 +59,21 @@ export default function App() {
 
   if (error)
     return (
-      <div className="state state--error">
-        ⚠ {error}
-        <br />
-        <button className="btn" onClick={reload}>Повторить</button>
-      </div>
+      <>
+        <div className="state state--error">⚠ {error}<br /><button className="btn" onClick={reload}>Повторить</button></div>
+        <nav className="tabs"><span className="tab tab--active">...</span></nav>
+        <Dialog open={!!dialog} onClose={hideDialog} {...dialog} />
+      </>
     );
   if (!summary) return <div className="state">Загрузка…</div>;
 
   return (
     <div className="app">
       <header className="top"><h1>💳 Мой Кэшбэк</h1></header>
-
-      {tab === 'search' && <Search summary={summary} />}
-      {tab === 'cards' && <Cards summary={summary} reload={reload} />}
-      {tab === 'places' && <Places summary={summary} reload={reload} />}
-      {tab === 'more' && <More reload={reload} />}
-
+      {tab === 'search' && <Search summary={summary} showDialog={showDialog} />}
+      {tab === 'cards' && <Cards summary={summary} reload={reload} showDialog={showDialog} />}
+      {tab === 'places' && <Places summary={summary} reload={reload} showDialog={showDialog} />}
+      {tab === 'more' && <More reload={reload} showDialog={showDialog} />}
       <nav className="tabs">
         {[['search', '🔍', 'Поиск'], ['cards', '💳', 'Карты'], ['places', '📍', 'Точки'], ['more', '⚙️', 'Ещё']].map(
           ([id, icon, label]) => (
@@ -52,11 +83,12 @@ export default function App() {
           )
         )}
       </nav>
+      <Dialog open={!!dialog} onClose={hideDialog} {...dialog} />
     </div>
   );
 }
 
-/* ================= Поиск ================= */
+/* ================= Search ================= */
 function Search() {
   const [query, setQuery] = useState('');
   const [amount, setAmount] = useState('');
@@ -76,16 +108,14 @@ function Search() {
     <main className="screen">
       <div className="panel">
         <input className="inp" placeholder="MCC или точка — напр. 5411 / супермаркет" value={query}
-          onChange={(e) => setQuery(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && run()} />
+          onChange={(e) => setQuery(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && run()} aria-label="MCC или название точки" />
         <div className="row">
           <input className="inp inp--sum" placeholder="Сумма" inputMode="decimal" value={amount}
-            onChange={(e) => setAmount(e.target.value.replace(/[^\d.]/g, ''))} />
+            onChange={(e) => setAmount(e.target.value.replace(/[^\d.]/g, ''))} aria-label="Сумма покупки" />
           <button className="btn btn--primary" onClick={run} disabled={busy}>{busy ? '…' : 'Подобрать'}</button>
         </div>
       </div>
-
       {msg && <div className="state state--error">⚠ {msg}</div>}
-
       {result?.suggestions && (
         <div className="panel">
           <h3>Уточните запрос</h3>
@@ -98,7 +128,6 @@ function Search() {
           </div>
         </div>
       )}
-
       {result?.variants && (
         <>
           <div className="panel">
@@ -134,21 +163,21 @@ function Variant({ v, best }) {
   );
 }
 
-/* ================= Карты / Банки / Категории ================= */
-function Cards({ summary, reload }) {
+/* ================= Cards / Banks / Categories ================= */
+function Cards({ summary, reload, showDialog }) {
   const [bankModal, setBankModal] = useState(null);
   return (
     <main className="screen">
       <button className="btn btn--add" onClick={() => setBankModal({ name: '' })}>＋ Новый банк</button>
       {summary.banks.length === 0 && <div className="state">Банков пока нет.</div>}
-      {summary.banks.map((bank) => <BankPanel key={bank.id} bank={bank} reload={reload} />)}
+      {summary.banks.map((bank) => <BankPanel key={bank.id} bank={bank} reload={reload} showDialog={showDialog} />)}
       {bankModal && (
         <Modal title="Новый банк" onClose={() => setBankModal(null)}>
           <input className="inp" placeholder="Название банка" value={bankModal.name} autoFocus
-            onChange={(e) => setBankModal({ ...bankModal, name: e.target.value })} />
+            onChange={(e) => setBankModal({ ...bankModal, name: e.target.value })} aria-label="Название банка" />
           <button className="btn btn--primary" onClick={async () => {
             try { await call('saveBank', { name: bankModal.name }); setBankModal(null); reload(); }
-            catch (e) { alert(e.message); }
+            catch (e) { showDialog({ type: 'error', message: e.message }); }
           }}>Создать</button>
         </Modal>
       )}
@@ -156,9 +185,9 @@ function Cards({ summary, reload }) {
   );
 }
 
-function BankPanel({ bank, reload }) {
+function BankPanel({ bank, reload, showDialog }) {
   const [open, setOpen] = useState(true);
-  const [edit, setEdit] = useState(null); // {kind:'card'|'category', item|form}
+  const [edit, setEdit] = useState(null);
   return (
     <div className="panel">
       <div className="panel__head" onClick={() => setOpen(!open)}>
@@ -176,7 +205,6 @@ function BankPanel({ bank, reload }) {
             </div>
           ))}
           <button className="btn btn--lite" onClick={() => setEdit({ kind: 'card', item: null, bankId: bank.id })}>＋ карта</button>
-
           <h4>Категории</h4>
           {bank.categories.length === 0 && <div className="muted small">— категорий нет</div>}
           {bank.categories.map((c) => (
@@ -188,12 +216,12 @@ function BankPanel({ bank, reload }) {
           <button className="btn btn--lite" onClick={() => setEdit({ kind: 'category', item: null, bankId: bank.id })}>＋ категория</button>
         </>
       )}
-      {edit && <Editor edit={edit} bank={bank} onClose={() => setEdit(null)} reload={reload} />}
+      {edit && <Editor edit={edit} bank={bank} onClose={() => setEdit(null)} reload={reload} showDialog={showDialog} />}
     </div>
   );
 }
 
-function Editor({ edit, bank, onClose, reload }) {
+function Editor({ edit, bank, onClose, reload, showDialog }) {
   const isCard = edit.kind === 'card';
   const src = edit.item;
   const [form, setForm] = useState(
@@ -201,7 +229,6 @@ function Editor({ edit, bank, onClose, reload }) {
       ? { name: src?.name ?? '', last4: src?.last4 ?? '', holder: src?.holder ?? '', monthlyLimit: src?.monthlyLimit ?? '', limitLeft: src?.limitLeft ?? '', note: src?.note ?? '' }
       : { name: src?.name ?? '', percent: src?.percent ?? 0, mccText: (src?.mcc ?? []).join(', '), exclText: (src?.excludedMcc ?? []).join(', '), isAll: src?.isAll ?? false, note: src?.note ?? '' }
   );
-  const [mccHint, setMccHint] = useState([]);
   const bankId = src?.bankId ?? edit.bankId;
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
 
@@ -221,40 +248,44 @@ function Editor({ edit, bank, onClose, reload }) {
         await call('saveCategory', { bankId, id: src?.id, name: form.name, percent: Number(form.percent) || 0, mcc, excludedMcc, isAll: Boolean(form.isAll), note: form.note || null });
       }
       onClose(); reload();
-    } catch (e) { alert(e.message); }
+    } catch (e) { showDialog({ type: 'error', message: e.message }); }
   };
 
   const del = async () => {
-    if (!confirm('Удалить безвозвратно?')) return;
-    try {
-      await call(isCard ? 'deleteCard' : 'deleteCategory', { id: src.id });
-      onClose(); reload();
-    } catch (e) { alert(e.message); }
+    showDialog({ type: 'confirm', title: 'Удаление', message: 'Удалить безвозвратно?', yesLabel: 'Удалить', onYes: (confirmed) => {
+      if (!confirmed) return;
+      (async () => {
+        try {
+          await call(isCard ? 'deleteCard' : 'deleteCategory', { id: src.id });
+          onClose(); reload();
+        } catch (e) { showDialog({ type: 'error', message: e.message }); }
+      })();
+    }});
   };
 
   return (
     <Modal title={isCard ? (src ? 'Карта' : 'Новая карта') : (src ? 'Категория' : 'Новая категория')} onClose={onClose}>
-      <input className="inp" placeholder={isCard ? 'Название карты' : 'Название категории'} value={form.name} autoFocus onChange={set('name')} />
+      <input className="inp" placeholder={isCard ? 'Название карты' : 'Название категории'} value={form.name} autoFocus onChange={set('name')} aria-label={isCard ? 'Название карты' : 'Название категории'} />
       {isCard ? (
         <>
           <div className="row">
-            <input className="inp" placeholder="Последние 4 цифры" maxLength={4} inputMode="numeric" value={form.last4} onChange={(e) => setForm({ ...form, last4: e.target.value.replace(/\D/g, '') })} />
-            <input className="inp" placeholder="Владелец" value={form.holder} onChange={set('holder')} />
+            <input className="inp" placeholder="Последние 4 цифры" maxLength={4} inputMode="numeric" value={form.last4} onChange={(e) => setForm({ ...form, last4: e.target.value.replace(/\D/g, '') })} aria-label="Последние 4 цифры" />
+            <input className="inp" placeholder="Владелец" value={form.holder} onChange={set('holder')} aria-label="Владелец карты" />
           </div>
           <div className="row">
-            <input className="inp" inputMode="numeric" placeholder="Месячный лимит ₽" value={form.monthlyLimit} onChange={(e) => setForm({ ...form, monthlyLimit: e.target.value.replace(/\D/g, '') })} />
-            <input className="inp" inputMode="numeric" placeholder="Остаток ₽" value={form.limitLeft} onChange={(e) => setForm({ ...form, limitLeft: e.target.value.replace(/\D/g, '') })} />
+            <input className="inp" inputMode="numeric" placeholder="Месячный лимит ₽" value={form.monthlyLimit} onChange={(e) => setForm({ ...form, monthlyLimit: e.target.value.replace(/\D/g, '') })} aria-label="Месячный лимит" />
+            <input className="inp" inputMode="numeric" placeholder="Остаток ₽" value={form.limitLeft} onChange={(e) => setForm({ ...form, limitLeft: e.target.value.replace(/\D/g, '') })} aria-label="Остаток лимита" />
           </div>
         </>
       ) : (
         <>
           <div className="row">
-            <input className="inp inp--sum" inputMode="numeric" placeholder="%" value={form.percent} onChange={(e) => setForm({ ...form, percent: e.target.value.replace(/\D/g, '') })} />
+            <input className="inp inp--sum" inputMode="numeric" placeholder="%" value={form.percent} onChange={(e) => setForm({ ...form, percent: e.target.value.replace(/\D/g, '') })} aria-label="Процент кэшбэка" />
             <label className="check"><input type="checkbox" checked={form.isAll} onChange={(e) => setForm({ ...form, isAll: e.target.checked })} /> «Все покупки»</label>
           </div>
-          <input className="inp" placeholder="MCC через запятую: 5300, 5411" value={form.mccText} onChange={set('mccText')} />
-          <input className="inp" placeholder="Исключения MCC: 4829" value={form.exclText} onChange={set('exclText')} />
-          <textarea className="inp inp--area" placeholder="Заметка" value={form.note} onChange={set('note')} />
+          <input className="inp" placeholder="MCC через запятую: 5300, 5411" value={form.mccText} onChange={set('mccText')} aria-label="MCC коды через запятую" />
+          <input className="inp" placeholder="Исключения MCC: 4829" value={form.exclText} onChange={set('exclText')} aria-label="Исключения MCC" />
+          <textarea className="inp inp--area" placeholder="Заметка" value={form.note} onChange={set('note')} aria-label="Заметка" />
         </>
       )}
       <div className="row">
@@ -265,8 +296,8 @@ function Editor({ edit, bank, onClose, reload }) {
   );
 }
 
-/* ================= Точки ================= */
-function Places({ summary, reload }) {
+/* ================= Places ================= */
+function Places({ summary, reload, showDialog }) {
   const [edit, setEdit] = useState(null);
   return (
     <main className="screen">
@@ -282,16 +313,16 @@ function Places({ summary, reload }) {
       </div>
       {edit && (
         <Modal title={edit.id ? 'Точка' : 'Новая точка'} onClose={() => setEdit(null)}>
-          <input className="inp" placeholder="Название" value={edit.name} autoFocus onChange={(e) => setEdit({ ...edit, name: e.target.value })} />
-          <input className="inp" inputMode="numeric" placeholder="MCC" value={edit.mcc} onChange={(e) => setEdit({ ...edit, mcc: e.target.value.replace(/\D/g, '') })} />
+          <input className="inp" placeholder="Название" value={edit.name} autoFocus onChange={(e) => setEdit({ ...edit, name: e.target.value })} aria-label="Название точки" />
+          <input className="inp" inputMode="numeric" placeholder="MCC" value={edit.mcc} onChange={(e) => setEdit({ ...edit, mcc: e.target.value.replace(/\D/g, '') })} aria-label="MCC код" />
           <div className="row">
             {edit.id ? <button className="btn btn--danger" onClick={async () => {
-              try { await call('deletePlace', { id: edit.id }); setEdit(null); reload(); } catch (e) { alert(e.message); }
+              try { await call('deletePlace', { id: edit.id }); setEdit(null); reload(); } catch (e) { showDialog({ type: 'error', message: e.message }); }
             }}>Удалить</button> : <span />}
             <button className="btn btn--primary" onClick={async () => {
               const mcc = Number(edit.mcc);
-              if (!Number.isInteger(mcc) || mcc < 1 || mcc > 99999) { alert('MCC: введите целое число 1…99999'); return; }
-              try { await call('savePlace', { id: edit.id, name: edit.name, mcc }); setEdit(null); reload(); } catch (e) { alert(e.message); }
+              if (!Number.isInteger(mcc) || mcc < 1 || mcc > 99999) { showDialog({ type: 'error', message: 'MCC: введите целое число 1…99999' }); return; }
+              try { await call('savePlace', { id: edit.id, name: edit.name, mcc }); setEdit(null); reload(); } catch (e) { showDialog({ type: 'error', message: e.message }); }
             }}>Сохранить</button>
           </div>
         </Modal>
@@ -300,8 +331,8 @@ function Places({ summary, reload }) {
   );
 }
 
-/* ================= Ещё: экспорт / импорт ================= */
-function More({ reload }) {
+/* ================= More: Export / Import ================= */
+function More({ reload, showDialog }) {
   const exportData = async () => {
     try {
       const data = await call('exportData');
@@ -311,19 +342,31 @@ function More({ reload }) {
       a.download = `cashback-backup-${new Date().toISOString().slice(0, 10)}.json`;
       a.click();
       URL.revokeObjectURL(a.href);
-    } catch (e) { alert(e.message); }
+      showDialog({ type: 'info', message: 'Экспорт завершён ✓' });
+    } catch (e) { showDialog({ type: 'error', message: e.message }); }
   };
 
   const importData = async (mode) => {
-    const file = document.getElementById('import-file').files[0];
-    if (!file) { alert('Сначала выберите файл'); return; }
-    if (mode === 'replace' && !confirm('Заменить ВСЕ текущие данные?')) return;
-    try {
-      const data = JSON.parse(await file.text());
-      await call('importData', { mode, data });
-      reload();
-      alert('Импорт готов');
-    } catch (e) { alert('Ошибка импорта: ' + e.message); }
+    const fileInput = document.getElementById('import-file');
+    const file = fileInput?.files?.[0];
+    if (!file) { showDialog({ type: 'error', message: 'Сначала выберите файл' }); return; }
+    if (mode === 'replace') {
+      showDialog({ type: 'confirm', title: 'Замена данных', message: 'Заменить ВСЕ текущие данные?\nЭто действие необратимо.', yesLabel: 'Заменить всё', onYes: (confirmed) => {
+        if (!confirmed) return;
+        doImport(mode);
+      }});
+    } else {
+      doImport(mode);
+    }
+
+    async function doImport(importMode) {
+      try {
+        const data = JSON.parse(await file.text());
+        await call('importData', { mode: importMode, data });
+        reload();
+        showDialog({ type: 'info', message: 'Импорт готов ✓' });
+      } catch (e) { showDialog({ type: 'error', message: 'Ошибка импорта: ' + e.message }); }
+    }
   };
 
   return (
@@ -331,7 +374,7 @@ function More({ reload }) {
       <div className="panel">
         <h3>Резервная копия</h3>
         <button className="btn btn--primary" onClick={exportData}>⬇ Экспорт JSON</button>
-        <input type="file" id="import-file" accept=".json" className="inp inp--file" />
+        <input type="file" id="import-file" accept=".json" className="inp inp--file" aria-label="Файл для импорта" />
         <div className="row">
           <button className="btn" onClick={() => importData('merge')}>⬆ Импорт (дополнить)</button>
           <button className="btn btn--danger" onClick={() => importData('replace')}>⬆ Импорт (заменить)</button>
@@ -342,8 +385,7 @@ function More({ reload }) {
   );
 }
 
-/* ================= Общие ================= */
-
+/* ================= Helpers ================= */
 /** Разбор списка MCC: только целые 1…99999, мусор — понятная ошибка вместо NaN. */
 function parseMccList(text, field) {
   const out = [];
@@ -358,6 +400,7 @@ function parseMccList(text, field) {
   return out;
 }
 
+/** Встроенная модалка (для форм). */
 function Modal({ title, children, onClose }) {
   return (
     <div className="modal" onClick={onClose}>
