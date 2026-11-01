@@ -2,15 +2,28 @@ import React, { useState } from 'react';
 import { call } from '../api.js';
 import Modal from './Modal.jsx';
 
-/** Экран «Точки» — пользовательский справочник названий + MCC. */
+/** Экран «Точки» — пользовательский справочник с поиском. */
 export default function Places({ summary, reload, showDialog }) {
   const [edit, setEdit] = useState(null);
+  const [filter, setFilter] = useState('');
+
+  const filtered = filter.trim()
+    ? summary.places.filter(p => p.name.toLowerCase().includes(filter.toLowerCase()) ||
+                                  String(p.mcc).includes(filter))
+    : summary.places;
+
   return (
     <main className="screen">
-      <button className="btn btn--add" onClick={() => setEdit({ name: '', mcc: '' })}>＋ Точка</button>
-      {summary.places.length === 0 && <div className="state">Точек пока нет. Точка = название + MCC, чтобы искать по тексту.</div>}
+      <div className="row" style={{ gap: '0.5em' }}>
+        <input className="inp" placeholder="Поиск точки или MCC…" value={filter}
+          onChange={(e) => setFilter(e.target.value)} aria-label="Поиск точки" />
+        <button className="btn btn--add" onClick={() => setEdit({ name: '', mcc: '' })}>＋ Точка</button>
+      </div>
+      {filtered.length === 0 && (
+        <div className="state">{summary.places.length === 0 ? 'Точек пока нет. Точка = название + MCC, чтобы искать по тексту.' : 'Ничего не найдено.'}</div>
+      )}
       <div className="panel">
-        {summary.places.map((p) => (
+        {filtered.map((p) => (
           <div key={p.id} className="li" onClick={() => setEdit({ ...p })}>
             <span><b>{p.name}</b> <span className="muted small">· MCC {p.mcc}</span></span>
             <span className="muted">✎</span>
