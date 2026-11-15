@@ -1,0 +1,25 @@
+{
+  "appName": "💳 My Cashback",
+  "searchPlaceholder": "MCC or point e.g. 5411 / supermarket",
+  "amountPlaceholder": "Amount",
+  "searchButton": "Select",
+  "noResults": "No cards yet — add them in the Cards tab.",
+  "bestVariant": "best variant",
+  "cashback": "≈ {cashback} ₽",
+  "limitReached": "limit",
+  "percentGood": "percentGood",
+  "percentZero": "percentZero",
+  "muted": "muted",
+  "small": "small",
+  "tabs": {
+    "search": "Search",
+    "cards": "Cards",
+    "places": "Places",
+    "more": "More"
+  },
+  "header": "💳 My Cashback",
+  "state": {
+    "error": "⚠ {error}",
+    "loading": "Loading…"
+  }
+}

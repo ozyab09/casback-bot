@@ -1,0 +1,25 @@
+{
+  "appName": "💳 Мой Кэшбэк",
+  "searchPlaceholder": "MCC или точка — напр. 5411 / супермаркет",
+  "amountPlaceholder": "Сумма",
+  "searchButton": "Подобрать",
+  "noResults": "Карт пока нет — заведите их во вкладке «Карты».",
+  "bestVariant": "лучший вариант",
+  "cashback": "≈ {cashback} ₽",
+  "limitReached": "лимит",
+  "percentGood": "percentGood",
+  "percentZero": "percentZero",
+  "muted": "muted",
+  "small": "small",
+  "tabs": {
+    "search": "Поиск",
+    "cards": "Карты",
+    "places": "Точки",
+    "more": "Ещё"
+  },
+  "header": "💳 Мой Кэшбэк",
+  "state": {
+    "error": "⚠ {error}",
+    "loading": "Загрузка…"
+  }
+}
